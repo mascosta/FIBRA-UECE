@@ -11,7 +11,7 @@ db_user = 'admin'
 db_password = 'Q1w2e3r4'
 
 # Chave da API do AbuseIPDB
-API_KEY = '7e39bf20c8fe0a216d18df1297924f96f47a9a6194502302f9bdbe89ab8b63b1b7c0c01a2f87166c'
+API_KEY = '${API_KEY}'
 
 def e_ip_privado(ip):
     return ip_address(ip).is_private
