@@ -5,7 +5,7 @@
 
 O objetivo dessa ferramenta é aumentar o nível de segurança de um firewall de borda evitando a negação inicial do serviço, enquanto é efetuada a análise do tráfego registrado.
 
-## Pacotes e bibliotecas necessários(as) antes da execução.:penguin: :snake: :earth_americas:
+## Pacotes e bibliotecas necessários(as) antes da execução. :penguin: 
 
 Obs.: Visando facilitar a replicação deste guia, será considerado que o diretório vigente é o /opt.
 
@@ -73,11 +73,11 @@ pip install geoip2 scapy requests datetime psycopg2-binary
 
 ```
 
-## Usando a ferramenta
+## Usando a ferramenta :snake:
 
 Agora que os pacotes e bibliotecas estão devidamente instalados, é necessário o ajuste para execução das ferramentas. Onde uma executa em forma de daemon e outras em forma de rotinas, carregando e liberando dados de acordo com o agendamento (CRON).
 
-### 1. Coletando a blacklist remota
+### 1. Coletando a blacklist remota  :earth_americas:
 
 Para o funcionamento básico do projeto, será adicionada uma entrada no ```/etc/crontab``` com o seguinte comando:
 
@@ -90,7 +90,7 @@ Para o funcionamento básico do projeto, será adicionada uma entrada no ```/etc
 Com essa execução, todo dia a meia noite e meio dia o script atualizará a base de dados local com os registros de blacklist.
 
 
-### 2. Executando o script de "escuta" da interface
+### 2. Executando o script de "escuta" da interface :mag_right:
 
 Após o download da lista atualizada é necessário iniciar o *sniff* da rede para concatenar os endereços que estão tentando acesso com o existentes na lista baixada.
 
@@ -104,7 +104,7 @@ Para essa tarefa, é necessário executar o comando abaixo:
 
 Com essa execução, toda comunicação que chegar na interface que seja TCP, com endereço de IPv4 público será adicionado à tabela "network_traffic"
 
-### 3. Criando a blacklist local
+### 3. Criando a blacklist local :bookmark_tabs:
 
 Considerando que já existe uma tabela onde os endereços com má reputação estão inseridos e uma outra onde registra em tempo real as conexões oriundas de IPs públicos, faz-se necessária a concatenação desses endereços para uma análise mais detalhada, caso o edereço não esteja diretamente nessa lista.
 
