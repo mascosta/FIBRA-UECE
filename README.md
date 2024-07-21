@@ -232,9 +232,13 @@ Connections > Add connection > procurar por PostgreSQL > Create a PostgreSQL dat
 Na criação do data source, basta fazer as seguintes alterações, baseadas nas configurações do docker compose:
 
 **Host:** ```postgres```
+
 **Database:** ```firewall``` 
+
 **Username:** ```admin```
+
 **Password:** ```Q1w2e3r4```
+
 **TLS/SSL Mode:** ```disable```
 
 Depois do data source criado, é necessária a importação do arquivo JSON para visualização do dashboard.
