@@ -103,8 +103,16 @@ def handle_incoming_connection(packet):
     protocol_code, protocol_name = get_protocol_info(packet)
     src_service, dst_service = get_service_info(packet)
 
-    src_country_code, src_city, src_lat, src_lon = get_geo_info(src_ip)
-    dst_country_code, dst_city, dst_lat, dst_lon = get_geo_info(dst_ip)
+    # Adiciona verificação para evitar busca de geo info de IPs privados
+    if not is_private_ip(src_ip):
+        src_country_code, src_city, src_lat, src_lon = get_geo_info(src_ip)
+    else:
+        src_country_code, src_city, src_lat, src_lon = None, None, None, None
+
+    if not is_private_ip(dst_ip):
+        dst_country_code, dst_city, dst_lat, dst_lon = get_geo_info(dst_ip)
+    else:
+        dst_country_code, dst_city, dst_lat, dst_lon = None, None, None, None
 
     src_port = packet[TCP].sport
     dst_port = packet[TCP].dport

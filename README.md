@@ -5,6 +5,23 @@
 
 O objetivo dessa ferramenta é aumentar o nível de segurança de um firewall de borda evitando a negação inicial do serviço, enquanto é efetuada a análise do tráfego registrado.
 
+**Dicas e considerações de "preflight"** 
+
+Como a execução foi validada em um ambiente em nuvem pública, usando uma distribuição linux específica, é interessante algumas considerações e a tomada de alguns cuidados:
+
+* A distribuição usada para replicação desse guia foi a Debian/Linux. Caso seja usada uma outra distribuição, alguns passos aqui devem ser ajustados.
+
+* Nas regras de entrada, tentar limitar o endereço de origem para a conexão antes da solução ter sido devidamente configurada.
+
+* Para não liberar portas de banco e acesso web diretamente, é interessante o uso de um túnel ssh, através de uma sintaxe similar:
+
+```bash
+
+#ssh -i chave_de_conexão.pem usuario_padrao@ip_publico -L porta_local:localhost_remoto:porta_remota, Ex.:
+
+ssh -i chave.pem admin@44.203.88.120 -L 3000:127.0.0.1:3000
+```
+
 ## Pacotes e bibliotecas necessários(as) antes da execução. :penguin: 
 
 Obs.: Visando facilitar a replicação deste guia, será considerado que o diretório vigente é o /opt.
@@ -126,6 +143,13 @@ pip install geoip2 scapy requests datetime psycopg2-binary
 
 Agora que os pacotes e bibliotecas estão devidamente instalados, é necessária a inicialização dos containers para armazenamento de dados , exbição e gerenciamento dos dados usando as soluções *Postgre*, *Grafana* e *pgAdmin*, respectivamente. Onde uma executa em forma de daemon e outras em forma de rotinas, carregando e liberando dados de acordo com o agendamento (CRON).
 
+Algumas das ferramentas/scripts usam uma API, gerada na plataforma do *AbuseIPDB*. Sendo assim, ao invés de colocá-las diretamente no código, deve-se exportá-la como variável de ambiente e, na execução do script em python, usar a chamada ```os.getenv('API_KEY')```. Para atribuí-la como variável de ambiente, basta executar:
+
+```bash
+
+export API_KEY=SuaChaveAqui
+```
+
 
 ### 1. Executando os containers  :whale:
 
@@ -144,7 +168,7 @@ Para o funcionamento básico do projeto, será adicionada uma entrada no ```/etc
 
 ```bash
 
-0 0,12 * * * root python3 /opt/FIBRA-UECE/blacklist/update-bl.py
+0 0,12 * * * python3 /opt/FIBRA-UECE/blacklist/update-bl.py
 ```
 
 Com essa execução, todo dia a meia noite e meio dia o script atualizará a base de dados local com os registros de blacklist.
@@ -171,5 +195,34 @@ Essa execução será tabém executada através de rotina, adicionando a seguint
 
 ```bash
 
-0/10 * * * * root /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/tarpit/tarpit-in3.py > /dev/null &
+0/10 * * * * /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/tarpit/tarpit-in3.py > /dev/null 
 ```
+
+### 5. Ajustando o dashboard :chart_with_upwards_trend:
+
+O dashboard necessário para exibição da solução é o arquivo *Conexões.json*. Para seu uso, basta acessar ```https://IP_Do_Servidor:3000```. Na interface do grafana, logar com as credenciais iniciais ```admin/admin``` e atlerar a senha à critério.
+
+Depois, apontar o datasource da solução, navegando em:
+
+```
+Connections > Add connection > procurar por PostgreSQL > Create a PostgreSQL data source
+```
+
+Na criação do data source, basta fazer as seguintes alterações, baseadas nas configurações do docker compose:
+
+**Host:** ```postgres```
+**Database:** ```firewall``` 
+**Username:** ```admin```
+**Password:** ```Q1w2e3r4```
+**TLS/SSL Mode:** ```disable```
+
+Depois do data source criado, é necessária a importação do arquivo JSON para visualização do dashboard.
+
+```
+Dashboards > New > Import > Upload dashboard JSON file
+```
+
+Em seguida, basta clicar em ```Load```.
+
+
+E é isso, apos esses passos a ferramenta está configurada, pronta pra uso e exibindo os dados.
