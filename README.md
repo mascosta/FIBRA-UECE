@@ -13,6 +13,16 @@ Como a execução foi validada em um ambiente em nuvem pública, usando uma dist
 
 * Nas regras de entrada, tentar limitar o endereço de origem para a conexão antes da solução ter sido devidamente configurada.
 
+* Talvez o shape da máquina virtual não seja o suficiente, com 1 core de processador e 1GB de RAM. Caso isso aconteça, pode ser ajustada SWAP, para não limitar a execução e correr inclusive o risco de travar o servidor, por meio dos seguintes comandos:
+
+```bash
+
+fallocate -l 1G /opt/swapfile
+sudo chmod 600 /opt/swapfile
+mkswap /opt/swapfile
+swapon /opt/swapfile
+```
+
 * Para não liberar portas de banco e acesso web diretamente, é interessante o uso de um túnel ssh, através de uma sintaxe similar:
 
 ```bash
@@ -187,15 +197,26 @@ Para essa tarefa, é necessário executar o comando abaixo:
 
 Com essa execução, toda comunicação que chegar na interface que seja TCP, com endereço de IPv4 público será adicionado à tabela "network_traffic"
 
-### 4. Criando a blacklist local :bookmark_tabs:
+### 4. Ajustando a crontab para execução periódica das regras :bookmark_tabs:
 
 Considerando que já existe uma tabela onde os endereços com má reputação estão inseridos e uma outra onde registra em tempo real as conexões oriundas de IPs públicos, faz-se necessária a concatenação desses endereços para uma análise mais detalhada, caso o edereço não esteja diretamente nessa lista.
 
-Essa execução será tabém executada através de rotina, adicionando a seguinte linha no arquivo /etc/crontab:
+Além disso, é necessário adicionar a regra de firewall que será executada.
+
+Essa execução será tabém executada através de rotina, adicionando as seguintes linhas no arquivo /etc/crontab, que ficará da seguinte forma:
 
 ```bash
 
-0/10 * * * * /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/tarpit/tarpit-in3.py > /dev/null 
+SHELL=/bin/bash
+API_KEY='API_KEY_ABUSEIPDB'
+
+0 0,12 * * * python3 /opt/FIBRA-UECE/blacklist/update-bl.py
+
+0,10,22,30,40,50 * * * * /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/tarpit/tarpit-in3.py >> /var/log/tarpit.log 2>&1
+
+5,15,25,35,45,55 * * * * /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/firewall/rules.py >> /var/log/rules-fw.log 2>&1
+
+* * * * * /opt/FIBRA-UECE/checkService.sh
 ```
 
 ### 5. Ajustando o dashboard :chart_with_upwards_trend:
@@ -225,4 +246,4 @@ Dashboards > New > Import > Upload dashboard JSON file
 Em seguida, basta clicar em ```Load```.
 
 
-E é isso, apos esses passos a ferramenta está configurada, pronta pra uso e exibindo os dados.
+**E é isso. Após esses passos a ferramenta está configurada, pronta pra uso e exibindo os dados.**
