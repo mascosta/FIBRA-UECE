@@ -22,23 +22,23 @@ cd /opt
 
 apt update -y && \
 
-# Instalando pacotes
+# Instalando o git
+
+apt install git -y &&
+
+# Clonar o repositório
+
+git clone https://github.com/mascosta/FIBRA-UECE.git && \
+
+# Instalando demais pacotes
 
 apt install vim wget bash-completion \
  tcpdump net-tools curl telnet \
- nmap zip git unzip python3-pip python3-venv -y && \
-
-wget https://github.com/maxmind/geoipupdate/releases/download/v6.1.0/geoipupdate_6.1.0_linux_amd64.deb && \
-
-dpkg -i geoipupdate_6.1.0_linux_amd64.deb && \
+ nmap zip unzip python3-pip python3-venv -y && \
 
 # Instalação do Docker
 
 curl -fsSL https://get.docker.com | bash && \
-
-# Clonar o repositório
-
-git clone https://github.com/mascosta/FIBRA-UECE-UECE.git
 
 # Criar estrutura complementar ao repositório
 
@@ -55,7 +55,57 @@ python3 -m venv /opt/FIBRA-UECE/python/ && \
 # Removendo cache de pacotes da instância
 
 apt clean
+```
 
+### Baixando e armazenando a base de Geolocalização
+
+Alguns provedores oferecem, de forma gratuita, uma base de dados que relaciona **Endereços IP** com **Geolocalização**. 
+
+Para a solução, foi adotada a base da *MaxMind*, através do processo descrito abaixo:
+
+
+```bash
+
+# Baixando e instalando o executável do geoipupdate
+
+wget https://github.com/maxmind/geoipupdate/releases/download/v6.1.0/geoipupdate_6.1.0_linux_amd64.deb && \
+
+# Realizando a instalação.
+
+dpkg -i geoipupdate_6.1.0_linux_amd64.deb && \
+
+# Editar o arquivo de configuração
+
+vim /usr/share/doc/geoipupdate/GeoIP.conf
+```
+
+A *MaxMind* precisa que seja feito um cadastro para a disponibilização dessa base. Sendo assim, após o cadastro devidamente feito, serão gerados o ```AccountID``` e a ```LicenseKey```.
+
+Sendo necessário apenas inserir essas informações no arquivo citado assim, como o exemplo abaixo:
+
+```conf
+
+# GeoIP.conf file for `geoipupdate` program, for versions >= 3.1.1.
+# Used to update GeoIP databases from https://www.maxmind.com.
+# For more information about this config file, visit the docs at
+# https://dev.maxmind.com/geoip/updating-databases.
+
+# `AccountID` is from your MaxMind account.
+AccountID S3u1D4qu1
+
+# Replace YOUR_LICENSE_KEY_HERE with an active license key associated
+# with your MaxMind account.
+LicenseKey Su4L1c3ns3K3y4qu1
+
+# `EditionIDs` is from your MaxMind account.
+EditionIDs GeoLite2-ASN GeoLite2-City GeoLite2-Country
+```
+
+Após a configuração, basta gerar o comando abaixo para coleta da base:
+
+```bash
+
+geoipupdate -f /usr/share/doc/geoipupdate/GeoIP.conf
 ```
 
 ### Baixando bibliotecas:
@@ -70,7 +120,6 @@ source /opt/FIBRA-UECE/python/bin/activate
 # Instalação das bibliotecas via PIP
 
 pip install geoip2 scapy requests datetime psycopg2-binary
-
 ```
 
 ## Usando a ferramenta :snake:
@@ -84,8 +133,7 @@ A execução dos containers é feita via docker-compose. Por conta do stack de s
 
 ```bash
 
-docker compose -f /opt/FIBRA-UECE/docker-compose.yaml up -d
-
+docker compose -f /opt/FIBRA-UECE/docker/docker-compose.yaml up -d
 ```
 
 Com os containers em execução, faz-se necessário o ajuste para execução das ferramentas. Onde uma executa em forma de daemon e outras em forma de rotinas, carregando e liberando dados de acordo com o agendamento (CRON). 
@@ -97,7 +145,6 @@ Para o funcionamento básico do projeto, será adicionada uma entrada no ```/etc
 ```bash
 
 0 0,12 * * * root python3 /opt/FIBRA-UECE/blacklist/update-bl.py
-
 ```
 
 Com essa execução, todo dia a meia noite e meio dia o script atualizará a base de dados local com os registros de blacklist.
@@ -112,7 +159,6 @@ Para essa tarefa, é necessário executar o comando abaixo:
 ```bash
 
 /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/collect/collect-pgsql-ipv4-tcp-syn.py > /dev/null &
-
 ```
 
 Com essa execução, toda comunicação que chegar na interface que seja TCP, com endereço de IPv4 público será adicionado à tabela "network_traffic"
@@ -126,5 +172,4 @@ Essa execução será tabém executada através de rotina, adicionando a seguint
 ```bash
 
 0/10 * * * * root /opt/FIBRA-UECE/python/bin/python3 /opt/FIBRA-UECE/tarpit/tarpit-in3.py > /dev/null &
-
 ```

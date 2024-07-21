@@ -1,6 +1,7 @@
 import requests
 import psycopg2
 import re
+import os
 from datetime import datetime, timezone
 from ipaddress import ip_address
 
@@ -11,7 +12,7 @@ db_user = 'admin'
 db_password = 'Q1w2e3r4'
 
 # Chave da API do AbuseIPDB
-API_KEY = '${API_KEY}'
+API_KEY = os.getenv('API_KEY')
 
 def e_ip_privado(ip):
     return ip_address(ip).is_private

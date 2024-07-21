@@ -1,5 +1,6 @@
 import requests
 import psycopg2
+import os
 from datetime import datetime
 
 # Dados de conexão ao banco de dados PostgreSQL
@@ -9,7 +10,7 @@ db_user = 'admin'
 db_password = 'Q1w2e3r4'
 
 # Sua chave de API do AbuseIPDB
-API_KEY = '${API_KEY}'
+API_KEY = os.getenv('API_KEY')
 
 def buscar_dados():
     url = "https://api.abuseipdb.com/api/v2/blacklist"
