@@ -61,7 +61,7 @@ git clone https://github.com/mascosta/FIBRA-UECE.git && \
 
 apt install vim wget bash-completion \
  tcpdump net-tools curl telnet \
- nmap zip unzip python3-pip python3-venv -y && \
+ nmap zip unzip cron python3-pip python3-venv -y && \
 
 # Instalação do Docker
 
@@ -107,6 +107,8 @@ vim /usr/share/doc/geoipupdate/GeoIP.conf
 ```
 
 A *MaxMind* precisa que seja feito um cadastro para a disponibilização dessa base. Sendo assim, após o cadastro devidamente feito, serão gerados o ```AccountID``` e a ```LicenseKey```.
+
+![Maxmind](imgs/image.png)
 
 Sendo necessário apenas inserir essas informações no arquivo citado assim, como o exemplo abaixo:
 
@@ -195,14 +197,24 @@ http://IP_Do_Servidor
 ```
 #### 2.3 - Acessar a base de dados local, com os dados existentes no ```docker/docker-compose.yaml```
 
+![pgAdmin](imgs/pgAdmin.png)
+
 ```yaml 
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: Q1w2e3r4
       POSTGRES_DB: firewall
 ```
+![pgCredentials](imgs/pgAdminCred.png)
+
 #### 2.4 - Criar estrutura do banco
 
 Basta navegar até o schema **public**, abrir as tabelas, com o botão direito, clicar em *Query tool*, copiar o conteúdo do arquivo ```sql/pgsql.sql```, colar na consulta, selecionar tudo com o ```ctrl+A``` e executar.
+
+![pgAdminQuery](imgs/pgAdminQuery.png)
+
+
+
+![pgAdminExec](imgs/pgAdminExec.png)
 
 ### 3. Coletando a blacklist remota  :earth_americas:
 
@@ -235,6 +247,10 @@ Considerando que já existe uma tabela onde os endereços com má reputação es
 
 Além disso, é necessário adicionar a regra de firewall que será executada.
 
+Importante salientar que se faz necessária a adição manualmente do endereço de IP que está com acesso liberado, diretamente no banco, para continuação da validação da ferramenta.
+
+![whiteListIP](imgs/whiteListIP.png)
+
 Essa execução será tabém executada através de rotina, adicionando as seguintes linhas no arquivo /etc/crontab, que ficará da seguinte forma:
 
 ```bash
@@ -261,6 +277,8 @@ Depois, apontar o datasource da solução, navegando em:
 Connections > Add connection > procurar por PostgreSQL > Create a PostgreSQL data source
 ```
 
+![grafanaAddConnection](imgs/grafanaAddConnection.png)
+
 Na criação do data source, basta fazer as seguintes alterações, baseadas nas configurações do docker compose:
 
 **Host:** ```postgres```
@@ -273,13 +291,19 @@ Na criação do data source, basta fazer as seguintes alterações, baseadas nas
 
 **TLS/SSL Mode:** ```disable```
 
+![grafanaConnection](imgs/grafanaConnection.png)
+
 Depois do data source criado, é necessária a importação do arquivo JSON para visualização do dashboard.
 
 ```
 Dashboards > New > Import > Upload dashboard JSON file
 ```
 
+![grafanaImportDashboard](imgs/grafanaImportDashboard.png)
+
 Em seguida, basta clicar em ```Load```.
 
 
 **E é isso. Após esses passos a ferramenta está configurada, pronta pra uso e exibindo os dados.**
+
+![resultado](imgs/resultado.png)
