@@ -172,7 +172,39 @@ docker compose -f /opt/FIBRA-UECE/docker/docker-compose.yaml up -d
 
 Com os containers em execução, faz-se necessário o ajuste para execução das ferramentas. Onde uma executa em forma de daemon e outras em forma de rotinas, carregando e liberando dados de acordo com o agendamento (CRON). 
 
-### 2. Coletando a blacklist remota  :earth_americas:
+### 2. Criando a estrutura da base de dados  :elephant:
+
+Apos a execução dos containers, precisamos criar a estrutura das tabelas antes de realizar qualquer importação por parte da ferramenta e rotinas. Para essa criação, basta seguir os seguintes passos
+
+#### 2.1 - Acessar o PGAdmin4 Web.
+
+Serviço que está configurado no docker compose para ser executado na porta 80.
+
+```bash
+
+http://IP_Do_Servidor
+```
+#### 2.2 - Realizar login com as credenciais existentes no arquivo ```docker/docker-compose.yaml```
+
+**Atenção**, após três tentativas sem sucesso o usuário é bloqueado.
+
+```yaml
+
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: Q1w2e3r4!@#
+```
+#### 2.3 - Acessar a base de dados local, com os dados existentes no ```docker/docker-compose.yaml```
+
+```yaml 
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: Q1w2e3r4
+      POSTGRES_DB: firewall
+```
+#### 2.4 - Criar estrutura do banco
+
+Basta navegar até o schema **public**, abrir as tabelas, com o botão direito, clicar em *Query tool*, copiar o conteúdo do arquivo ```sql/pgsql.sql```, colar na consulta, selecionar tudo com o ```ctrl+A``` e executar.
+
+### 3. Coletando a blacklist remota  :earth_americas:
 
 Para o funcionamento básico do projeto, será adicionada uma entrada no ```/etc/crontab``` com o seguinte comando:
 
@@ -184,7 +216,7 @@ Para o funcionamento básico do projeto, será adicionada uma entrada no ```/etc
 Com essa execução, todo dia a meia noite e meio dia o script atualizará a base de dados local com os registros de blacklist.
 
 
-### 3. Executando o script de "escuta" da interface :mag_right:
+### 4. Executando o script de "escuta" da interface :mag_right:
 
 Após o download da lista atualizada é necessário iniciar o *sniff* da rede para concatenar os endereços que estão tentando acesso com o existentes na lista baixada.
 
@@ -197,7 +229,7 @@ Para essa tarefa, é necessário executar o comando abaixo:
 
 Com essa execução, toda comunicação que chegar na interface que seja TCP, com endereço de IPv4 público será adicionado à tabela "network_traffic"
 
-### 4. Ajustando a crontab para execução periódica das regras :bookmark_tabs:
+### 5. Ajustando a crontab para execução periódica das regras :bookmark_tabs:
 
 Considerando que já existe uma tabela onde os endereços com má reputação estão inseridos e uma outra onde registra em tempo real as conexões oriundas de IPs públicos, faz-se necessária a concatenação desses endereços para uma análise mais detalhada, caso o edereço não esteja diretamente nessa lista.
 
@@ -219,7 +251,7 @@ API_KEY='API_KEY_ABUSEIPDB'
 * * * * * /opt/FIBRA-UECE/checkService.sh
 ```
 
-### 5. Ajustando o dashboard :chart_with_upwards_trend:
+### 6. Ajustando o dashboard :chart_with_upwards_trend:
 
 O dashboard necessário para exibição da solução é o arquivo *Conexões.json*. Para seu uso, basta acessar ```https://IP_Do_Servidor:3000```. Na interface do grafana, logar com as credenciais iniciais ```admin/admin``` e atlerar a senha à critério.
 
