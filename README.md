@@ -108,7 +108,7 @@ vim /usr/share/doc/geoipupdate/GeoIP.conf
 
 A *MaxMind* precisa que seja feito um cadastro para a disponibilização dessa base. Sendo assim, após o cadastro devidamente feito, serão gerados o ```AccountID``` e a ```LicenseKey```.
 
-![Maxmind](imgs/image.png)
+![Maxmind](imgs/maxMind.png)
 
 Sendo necessário apenas inserir essas informações no arquivo citado assim, como o exemplo abaixo:
 
