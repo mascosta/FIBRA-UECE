@@ -29,7 +29,7 @@ CREATE TABLE wl_address_local (
 -- Criação da tabela tp_address_local para endereços em Tarpit
 CREATE TABLE tp_address_local (
     id SERIAL PRIMARY KEY,
-    ip_address VARCHAR(45) NOT NULL,
+    ip_address VARCHAR(45) UNIQUE NOT NULL,
     country_code VARCHAR(3) NOT NULL,
     abuse_confidence_score INT NOT NULL,
     last_reported_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,

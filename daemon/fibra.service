@@ -1,0 +1,19 @@
+[Unit]
+Description=Fibra Project Monitoring Service
+After=network.target
+
+[Service]
+ExecStart=/etc/fibra/venv/bin/python3 /etc/fibra/monitor.py
+WorkingDirectory=/etc/fibra
+Restart=always
+User=root
+Group=root
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=fibra-monitor
+Environment="FIBRA_PATH=/etc/firewall"
+Environment="PYTHON_PATH=/etc/firewall/venv/bin/python3"
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
