@@ -1,22 +1,15 @@
 import requests
-import psycopg2
 import os
 import logging
-from ipaddress import ip_address
-from logger import get_logger
 import sys
+from ipaddress import ip_address
+from db_config import get_db_connection
+from geo_helper import get_geo_info
+from logger import get_logger
 
 # Configuração do logger
 logger = get_logger("tarpit-in", severity=logging.INFO)
 logger.info("Iniciando checagem de reputação de IPs.")
-
-# Configuração do PostgreSQL
-db_config = {
-    'dbname': 'firewall',
-    'user': 'admin',
-    'password': 'Q1w2e3r4',
-    'host': 'localhost'
-}
 
 # Chave da API do AbuseIPDB
 API_KEY = os.getenv('API_KEY')
@@ -33,17 +26,16 @@ def is_private_ip(ip):
     """
     return ip_address(ip).is_private
 
-def execute_query(query, params=()):
+def execute_query(conn, query, params=()):
     """
     Executa uma consulta no banco de dados PostgreSQL.
     """
     try:
-        with psycopg2.connect(**db_config) as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
-                if query.strip().lower().startswith("select"):
-                    return cur.fetchall()
-                conn.commit()
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            if query.strip().lower().startswith("select"):
+                return cur.fetchall()
+            conn.commit()
     except Exception as e:
         logger.exception(f"Erro ao executar query: {query}")
         return []
@@ -74,26 +66,39 @@ def fetch_ip_reputation(ip):
         logger.exception(f"Erro ao buscar reputação do IP {ip}.")
     return None
 
-def insert_to_blacklist(ip, reputation):
+def insert_to_blacklist(conn, ip, reputation, geo_data):
     """
-    Insere um IP na blacklist local.
+    Insere um IP na blacklist local com dados de geolocalização.
     """
     query = """
-    INSERT INTO bl_address_local (ip_address, abuse_confidence_score)
-    VALUES (%s, %s) ON CONFLICT (ip_address) DO NOTHING;
+    INSERT INTO bl_address_local (
+        ip_address, abuse_confidence_score,
+        country_code, city, latitude, longitude
+    )
+    VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (ip_address) DO NOTHING;
     """
-    execute_query(query, (ip, reputation['abuseConfidenceScore']))
+    execute_query(conn, query, (
+        ip, reputation['abuseConfidenceScore'],
+        geo_data['country_code'], geo_data['city'],
+        geo_data['latitude'], geo_data['longitude']
+    ))
     logger.info(f"IP {ip} adicionado à blacklist com score {reputation['abuseConfidenceScore']}.")
 
-def insert_to_tarpit(ip):
+def insert_to_tarpit(conn, ip, geo_data):
     """
-    Insere um IP na tabela TARPIT para degradação futura.
+    Insere um IP na tabela TARPIT com dados de geolocalização.
     """
     query = """
-    INSERT INTO tp_address_local (ip_address)
-    VALUES (%s) ON CONFLICT (ip_address) DO NOTHING;
+    INSERT INTO tp_address_local (
+        ip_address, country_code, city, latitude, longitude
+    )
+    VALUES (%s, %s, %s, %s, %s) ON CONFLICT (ip_address) DO NOTHING;
     """
-    execute_query(query, (ip,))
+    execute_query(conn, query, (
+        ip,
+        geo_data['country_code'], geo_data['city'],
+        geo_data['latitude'], geo_data['longitude']
+    ))
     logger.info(f"IP {ip} adicionado à TARPIT para análise futura.")
 
 # Função principal
@@ -112,14 +117,29 @@ def main():
         logger.info(f"IP privado ignorado: {ip_to_check}")
         return
 
-    # Busca a reputação do IP
-    reputation = fetch_ip_reputation(ip_to_check)
+    # Conexão com o banco de dados
+    conn = None
+    try:
+        conn = get_db_connection()
 
-    # Avalia a reputação e insere na blacklist ou tarpit
-    if reputation and reputation.get('abuseConfidenceScore', 0) >= 75:
-        insert_to_blacklist(ip_to_check, reputation)
-    else:
-        insert_to_tarpit(ip_to_check)
+        # Busca a reputação do IP
+        reputation = fetch_ip_reputation(ip_to_check)
+
+        # Busca os dados de geolocalização
+        geo_data = get_geo_info(ip_to_check)
+        if not geo_data:
+            geo_data = {"country_code": None, "city": None, "latitude": None, "longitude": None}
+
+        # Avalia a reputação e insere na blacklist ou tarpit
+        if reputation and reputation.get('abuseConfidenceScore', 0) >= 75:
+            insert_to_blacklist(conn, ip_to_check, reputation, geo_data)
+        else:
+            insert_to_tarpit(conn, ip_to_check, geo_data)
+    except Exception as e:
+        logger.critical(f"Erro crítico no processamento do IP {ip_to_check}: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     main()

@@ -60,13 +60,32 @@ def insert_to_blacklist(ip, reputation):
     execute_query(query, (ip, reputation['abuseConfidenceScore']))
     logger.info(f"IP {ip} adicionado à blacklist com score {reputation['abuseConfidenceScore']}.")
 
-def insert_to_tarpit(ip):
-    query = """
-    INSERT INTO tp_address_local (ip_address)
-    VALUES (%s) ON CONFLICT (ip_address) DO NOTHING;
+def insert_to_tarpit(ip, country_code=None, abuse_confidence_score=None, last_reported_at=None):
     """
-    execute_query(query, (ip,))
-    logger.info(f"IP {ip} adicionado à TARPIT para análise futura.")
+    Insere um IP na tabela tp_address_local, permitindo valores nulos para colunas opcionais.
+    """
+    query = """
+    INSERT INTO tp_address_local (ip_address, country_code, abuse_confidence_score, last_reported_at)
+    VALUES (%s, %s, %s, %s)
+    ON CONFLICT (ip_address) DO NOTHING;
+    """
+    try:
+        execute_query(query, (ip, country_code, abuse_confidence_score, last_reported_at))
+        logger.info(f"IP {ip} adicionado à tarpit com sucesso.")
+    except Exception as e:
+        logger.error(f"Erro ao inserir IP {ip} na tarpit: {e}")
+
+def handle_unknown_ip(ip, reputation_data):
+    """
+    Processa um IP público desconhecido e tenta inseri-lo na tarpit.
+    """
+    country_code = reputation_data.get('countryCode') if reputation_data else None
+    abuse_confidence_score = reputation_data.get('abuseConfidenceScore') if reputation_data else None
+    last_reported_at = reputation_data.get('lastReportedAt') if reputation_data else None
+
+    # Insere o IP na tarpit mesmo que algumas informações estejam ausentes
+    insert_to_tarpit(ip, country_code, abuse_confidence_score, last_reported_at)
+
 
 # Função principal
 def main():
