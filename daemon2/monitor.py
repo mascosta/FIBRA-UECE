@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import ipaddress
 import logging
+import os
 from pathlib import Path
 from subprocess import Popen
 from functools import lru_cache
@@ -10,14 +11,15 @@ from db_config import get_db_connection
 from geo_helper import get_geo_info
 from logger import get_logger
 
-# Configuração de logs
+# Configuração do logger
 logger = get_logger("monitor", severity=logging.INFO)
 
-# Caminho dos scripts
-fibra_path = Path(os.getenv("FIBRA_PATH", "/default/path"))
+# Caminhos configuráveis
+fibra_path = Path(os.getenv("FIBRA_PATH", "/opt/fibra"))
 python_path = Path(os.getenv("PYTHON_PATH", "/usr/bin/python3"))
 
-# Função para carregar whitelist na inicialização
+# Função para carregar a whitelist
+@lru_cache(maxsize=1)
 def load_whitelist(cursor):
     try:
         cursor.execute("SELECT ip_address FROM wl_address_local")
@@ -28,24 +30,18 @@ def load_whitelist(cursor):
         logger.error(f"Erro ao carregar whitelist: {e}")
         return set()
 
-# Verifica se o IP está em listas e rastreia whitelist
+# Verifica se o IP está em listas
 def is_ip_allowed(cursor, ip, processed_whitelist):
     try:
+        # Verifica whitelist em cache
         if ip in processed_whitelist:
-            return True  # Já processado
-
-        # Verifica whitelist
-        cursor.execute("SELECT 1 FROM wl_address_local WHERE ip_address = %s", (ip,))
-        if cursor.fetchone():
-            logger.info(f"IP {ip} está na whitelist. Ignorando processamento.")
-            processed_whitelist.add(ip)
             return True
 
         # Verifica blacklist e tarpit
         for table in ["bl_address_local", "tp_address_local"]:
             cursor.execute(f"SELECT 1 FROM {table} WHERE ip_address = %s", (ip,))
             if cursor.fetchone():
-                logger.debug(f"IP {ip} encontrado em {table}.")
+                logger.info(f"IP {ip} encontrado em {table}. Ignorando processamento.")
                 return True
 
         return False
@@ -53,7 +49,7 @@ def is_ip_allowed(cursor, ip, processed_whitelist):
         logger.error(f"Erro ao verificar listas para IP {ip}: {e}")
         return False
 
-# Função para processar conexões
+# Processa conexões TCP
 async def handle_incoming_connection(packet, conn, cursor, processed_whitelist):
     try:
         if not (IP in packet and TCP in packet):
@@ -62,19 +58,19 @@ async def handle_incoming_connection(packet, conn, cursor, processed_whitelist):
         src_ip = packet[IP].src
         dst_ip = packet[IP].dst
 
-        # Verifica se o IP de destino é válido
-        if not dst_ip or ipaddress.ip_address(src_ip).is_private:
+        # Ignora IPs privados
+        if ipaddress.ip_address(src_ip).is_private or not dst_ip:
             return
 
-        # Verifica se o IP está em listas
+        # Verifica se o IP está permitido
         if is_ip_allowed(cursor, src_ip, processed_whitelist):
             return
 
-        # Geolocalização
-        geo_src = get_geo_info(src_ip)
-        geo_dst = get_geo_info(dst_ip)
+        # Consulta geolocalização
+        geo_src = get_geo_info(src_ip, logger=logger)
+        geo_dst = get_geo_info(dst_ip, logger=logger)
 
-        # Se flag SYN sem ACK
+        # Verifica flag SYN sem ACK
         if 'S' in packet[TCP].flags and not 'A' in packet[TCP].flags:
             timestamp = datetime.datetime.now()
             cursor.execute("""
@@ -95,7 +91,7 @@ async def handle_incoming_connection(packet, conn, cursor, processed_whitelist):
     except Exception as e:
         logger.error(f"Erro ao processar pacote: {e}")
 
-# Função para acionar Manager
+# Função para acionar o Manager
 def trigger_manager(src_ip):
     try:
         logger.info(f"Acionando o Manager para o IP: {src_ip}")
@@ -103,31 +99,28 @@ def trigger_manager(src_ip):
     except Exception as e:
         logger.error(f"Erro ao acionar o Manager: {e}")
 
-# Envolve a corrotina em uma função síncrona
+# Wrapper para chamar a corrotina
 def sync_wrapper(packet, conn, cursor, processed_whitelist, loop):
-    asyncio.run_coroutine_threadsafe(handle_incoming_connection(packet, conn, cursor, processed_whitelist), loop)
+    asyncio.run_coroutine_threadsafe(
+        handle_incoming_connection(packet, conn, cursor, processed_whitelist), loop
+    )
 
 # Captura de pacotes
 async def packet_sniffer():
-    conn, cursor = get_db_connection(), None
     try:
-        cursor = conn.cursor()
-        processed_whitelist = load_whitelist(cursor)  # Carrega whitelist ao iniciar
-        loop = asyncio.get_event_loop()
-        logger.info("Iniciando captura de pacotes.")
-        sniffer = AsyncSniffer(
-            filter="tcp",
-            prn=lambda pkt: sync_wrapper(pkt, conn, cursor, processed_whitelist, loop)
-        )
-        sniffer.start()
-        await asyncio.sleep(float("inf"))
+        with get_db_connection(logger) as conn:
+            with conn.cursor() as cursor:
+                processed_whitelist = load_whitelist(cursor)
+                loop = asyncio.get_event_loop()
+                logger.info("Iniciando captura de pacotes.")
+                sniffer = AsyncSniffer(
+                    filter="tcp",
+                    prn=lambda pkt: sync_wrapper(pkt, conn, cursor, processed_whitelist, loop)
+                )
+                sniffer.start()
+                await asyncio.sleep(float("inf"))
     except Exception as e:
         logger.critical(f"Erro crítico na captura de pacotes: {e}")
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
 
 if __name__ == "__main__":
     asyncio.run(packet_sniffer())

@@ -1,6 +1,5 @@
 import requests
 import os
-import logging
 import sys
 from ipaddress import ip_address
 from db_config import get_db_connection
@@ -16,8 +15,6 @@ API_KEY = os.getenv('API_KEY')
 
 if not API_KEY:
     logger.error("API_KEY não está configurada. Configure a variável de ambiente 'API_KEY' antes de executar o script.")
-else:
-    logger.debug(f"API_KEY carregada: {API_KEY[:5]}***")  # Exibe parte da chave para verificação
 
 # Funções auxiliares
 def is_private_ip(ip):
@@ -45,26 +42,42 @@ def fetch_ip_reputation(ip):
     Faz uma consulta à API do AbuseIPDB para buscar a reputação de um IP.
     """
     url = "https://api.abuseipdb.com/api/v2/check"
-    headers = {
-        'Key': API_KEY,
-        'Accept': 'application/json'
-    }
-    params = {
-        'ipAddress': ip,
-        'maxAgeInDays': 90,  # Atualizado para refletir a documentação
-        'verbose': True  # Adiciona informações detalhadas
-    }
+    headers = {'Key': API_KEY, 'Accept': 'application/json'}
+    params = {'ipAddress': ip, 'maxAgeInDays': 90, 'verbose': True}
     try:
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
             return response.json()['data']
-        elif response.status_code == 401:
-            logger.error("Erro 401: Chave de API inválida ou não configurada.")
         else:
             logger.error(f"Erro na API AbuseIPDB para {ip}: {response.status_code} - {response.text}")
     except Exception as e:
         logger.exception(f"Erro ao buscar reputação do IP {ip}.")
     return None
+
+def remove_from_tarpit(conn, ip):
+    """
+    Remove um IP da tabela TARPIT.
+    """
+    query = "DELETE FROM tp_address_local WHERE ip_address = %s;"
+    execute_query(conn, query, (ip,))
+    logger.info(f"IP {ip} removido da tabela TARPIT.")
+
+def handle_ip_in_lists(conn, ip):
+    """
+    Verifica se o IP está na blacklist ou whitelist e o remove da TARPIT se necessário.
+    """
+    try:
+        # Verifica se o IP está na whitelist ou blacklist
+        for table in ["bl_address_local", "wl_address_local"]:
+            query = f"SELECT 1 FROM {table} WHERE ip_address = %s;"
+            if execute_query(conn, query, (ip,)):
+                logger.info(f"IP {ip} encontrado na tabela {table}. Removendo da TARPIT.")
+                remove_from_tarpit(conn, ip)
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Erro ao verificar e remover IP {ip} das tabelas: {e}")
+        return False
 
 def insert_to_blacklist(conn, ip, reputation, geo_data):
     """
@@ -95,8 +108,7 @@ def insert_to_tarpit(conn, ip, geo_data):
     VALUES (%s, %s, %s, %s, %s) ON CONFLICT (ip_address) DO NOTHING;
     """
     execute_query(conn, query, (
-        ip,
-        geo_data['country_code'], geo_data['city'],
+        ip, geo_data['country_code'], geo_data['city'],
         geo_data['latitude'], geo_data['longitude']
     ))
     logger.info(f"IP {ip} adicionado à TARPIT para análise futura.")
@@ -117,16 +129,19 @@ def main():
         logger.info(f"IP privado ignorado: {ip_to_check}")
         return
 
-    # Conexão com o banco de dados
     conn = None
     try:
         conn = get_db_connection()
+
+        # Verifica se o IP está na blacklist ou whitelist e remove da TARPIT se necessário
+        if handle_ip_in_lists(conn, ip_to_check):
+            return
 
         # Busca a reputação do IP
         reputation = fetch_ip_reputation(ip_to_check)
 
         # Busca os dados de geolocalização
-        geo_data = get_geo_info(ip_to_check)
+        geo_data = get_geo_info(ip_to_check, logger=logger)
         if not geo_data:
             geo_data = {"country_code": None, "city": None, "latitude": None, "longitude": None}
 
