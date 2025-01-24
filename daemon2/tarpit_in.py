@@ -1,14 +1,13 @@
 import requests
 import os
 import sys
-from ipaddress import ip_address
+import logging
 from db_config import get_db_connection
 from geo_helper import get_geo_info
 from logger import get_logger
 
 # Configuração do logger
 logger = get_logger("tarpit-in", severity=logging.INFO)
-logger.info("Iniciando checagem de reputação de IPs.")
 
 # Chave da API do AbuseIPDB
 API_KEY = os.getenv('API_KEY')
@@ -17,12 +16,6 @@ if not API_KEY:
     logger.error("API_KEY não está configurada. Configure a variável de ambiente 'API_KEY' antes de executar o script.")
 
 # Funções auxiliares
-def is_private_ip(ip):
-    """
-    Verifica se o IP é privado.
-    """
-    return ip_address(ip).is_private
-
 def execute_query(conn, query, params=()):
     """
     Executa uma consulta no banco de dados PostgreSQL.
@@ -54,30 +47,32 @@ def fetch_ip_reputation(ip):
         logger.exception(f"Erro ao buscar reputação do IP {ip}.")
     return None
 
-def remove_from_tarpit(conn, ip):
+def insert_or_update_tarpit(conn, ip, reputation, geo_data):
     """
-    Remove um IP da tabela TARPIT.
+    Insere ou atualiza um IP na tabela TARPIT com os dados mais recentes.
     """
-    query = "DELETE FROM tp_address_local WHERE ip_address = %s;"
-    execute_query(conn, query, (ip,))
-    logger.info(f"IP {ip} removido da tabela TARPIT.")
-
-def handle_ip_in_lists(conn, ip):
+    query = """
+    INSERT INTO tp_address_local (
+        ip_address, country_code, abuse_confidence_score,
+        last_reported_at, src_longitude, src_latitude
+    )
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (ip_address) DO UPDATE SET
+        country_code = EXCLUDED.country_code,
+        abuse_confidence_score = EXCLUDED.abuse_confidence_score,
+        last_reported_at = EXCLUDED.last_reported_at,
+        src_longitude = EXCLUDED.src_longitude,
+        src_latitude = EXCLUDED.src_latitude;
     """
-    Verifica se o IP está na blacklist ou whitelist e o remove da TARPIT se necessário.
-    """
-    try:
-        # Verifica se o IP está na whitelist ou blacklist
-        for table in ["bl_address_local", "wl_address_local"]:
-            query = f"SELECT 1 FROM {table} WHERE ip_address = %s;"
-            if execute_query(conn, query, (ip,)):
-                logger.info(f"IP {ip} encontrado na tabela {table}. Removendo da TARPIT.")
-                remove_from_tarpit(conn, ip)
-                return True
-        return False
-    except Exception as e:
-        logger.error(f"Erro ao verificar e remover IP {ip} das tabelas: {e}")
-        return False
+    execute_query(conn, query, (
+        ip,
+        geo_data['country_code'],
+        reputation['abuseConfidenceScore'],
+        reputation['lastReportedAt'],
+        geo_data['longitude'],
+        geo_data['latitude']
+    ))
+    logger.info(f"IP {ip} adicionado ou atualizado na TARPIT com score {reputation['abuseConfidenceScore']}.")
 
 def insert_to_blacklist(conn, ip, reputation, geo_data):
     """
@@ -86,7 +81,7 @@ def insert_to_blacklist(conn, ip, reputation, geo_data):
     query = """
     INSERT INTO bl_address_local (
         ip_address, abuse_confidence_score,
-        country_code, city, latitude, longitude
+        country_code, city, src_latitude, src_longitude
     )
     VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (ip_address) DO NOTHING;
     """
@@ -97,21 +92,16 @@ def insert_to_blacklist(conn, ip, reputation, geo_data):
     ))
     logger.info(f"IP {ip} adicionado à blacklist com score {reputation['abuseConfidenceScore']}.")
 
-def insert_to_tarpit(conn, ip, geo_data):
+def remove_from_tarpit(conn, ip):
     """
-    Insere um IP na tabela TARPIT com dados de geolocalização.
+    Remove um IP da tabela TARPIT.
     """
-    query = """
-    INSERT INTO tp_address_local (
-        ip_address, country_code, city, latitude, longitude
-    )
-    VALUES (%s, %s, %s, %s, %s) ON CONFLICT (ip_address) DO NOTHING;
-    """
-    execute_query(conn, query, (
-        ip, geo_data['country_code'], geo_data['city'],
-        geo_data['latitude'], geo_data['longitude']
-    ))
-    logger.info(f"IP {ip} adicionado à TARPIT para análise futura.")
+    query = "DELETE FROM tp_address_local WHERE ip_address = %s;"
+    try:
+        execute_query(conn, query, (ip,))
+        logger.info(f"IP {ip} removido da tabela TARPIT.")
+    except Exception as e:
+        logger.error(f"Erro ao remover o IP {ip} da tabela TARPIT: {e}")
 
 # Função principal
 def main():
@@ -124,21 +114,18 @@ def main():
 
     ip_to_check = sys.argv[1]
 
-    # Verifica se o IP é privado
-    if is_private_ip(ip_to_check):
-        logger.info(f"IP privado ignorado: {ip_to_check}")
-        return
+    # Log informando o IP sendo analisado
+    logger.info(f"Iniciando checagem de reputação para o IP: {ip_to_check}")
 
     conn = None
     try:
         conn = get_db_connection()
 
-        # Verifica se o IP está na blacklist ou whitelist e remove da TARPIT se necessário
-        if handle_ip_in_lists(conn, ip_to_check):
-            return
-
         # Busca a reputação do IP
         reputation = fetch_ip_reputation(ip_to_check)
+        if not reputation:
+            logger.warning(f"Reputação do IP {ip_to_check} não encontrada. Ignorando.")
+            return
 
         # Busca os dados de geolocalização
         geo_data = get_geo_info(ip_to_check, logger=logger)
@@ -146,10 +133,10 @@ def main():
             geo_data = {"country_code": None, "city": None, "latitude": None, "longitude": None}
 
         # Avalia a reputação e insere na blacklist ou tarpit
-        if reputation and reputation.get('abuseConfidenceScore', 0) >= 75:
+        if reputation.get('abuseConfidenceScore', 0) >= 75:
             insert_to_blacklist(conn, ip_to_check, reputation, geo_data)
         else:
-            insert_to_tarpit(conn, ip_to_check, geo_data)
+            insert_or_update_tarpit(conn, ip_to_check, reputation, geo_data)
     except Exception as e:
         logger.critical(f"Erro crítico no processamento do IP {ip_to_check}: {e}")
     finally:
