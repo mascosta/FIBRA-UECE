@@ -46,16 +46,21 @@ async def handle_incoming_connection(packet):
 # Captura de pacotes
 async def packet_sniffer():
     try:
+        # Função para lidar com pacotes no contexto assíncrono
+        def handle_packet_sync(packet):
+            asyncio.run(handle_incoming_connection(packet))
+
         # Inicia o sniffer assíncrono
         sniffer = AsyncSniffer(
             filter="tcp",
-            prn=lambda pkt: asyncio.create_task(handle_incoming_connection(pkt))
+            prn=handle_packet_sync  # Chama a função síncrona que executa a coroutine
         )
         sniffer.start()
         await asyncio.sleep(float("inf"))
     except Exception as e:
         # Apenas imprime o erro, já que não há logs configurados
         print(f"Erro crítico na captura de pacotes: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(packet_sniffer())
