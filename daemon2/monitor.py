@@ -10,12 +10,16 @@ fibra_path = Path(os.getenv("FIBRA_PATH", "/opt/fibra"))
 python_path = Path(os.getenv("PYTHON_PATH", "/usr/bin/python3"))
 
 # Função para acionar o Manager
-def trigger_manager(src_ip):
+def trigger_manager(src_ip, src_port, dst_port):
     try:
-        # Aciona o script manager.py passando o IP como argumento
-        Popen([str(python_path), str(fibra_path / "manager.py"), src_ip])
+        Popen([
+            str(python_path),
+            str(fibra_path / "manager.py"),
+            src_ip,
+            str(src_port),
+            str(dst_port)
+        ])
     except Exception as e:
-        # Apenas imprime o erro, sem registrar em logs para evitar sobrecarga
         print(f"Erro ao acionar o Manager para o IP {src_ip}: {e}")
 
 # Processa conexões TCP
@@ -34,7 +38,7 @@ async def handle_incoming_connection(packet):
         # Verifica flag SYN sem ACK
         if 'S' in packet[TCP].flags and not 'A' in packet[TCP].flags:
             # Aciona o manager para processar o IP
-            trigger_manager(src_ip)
+            trigger_manager(src_ip, src_port, dst_port)
     except Exception as e:
         # Apenas imprime o erro, sem registrar em logs
         print(f"Erro ao processar pacote: {e}")
