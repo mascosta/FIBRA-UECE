@@ -1,4 +1,5 @@
 import subprocess
+import logging
 from db_config import get_db_connection
 from geo_helper import get_geo_info
 from logger import get_logger
